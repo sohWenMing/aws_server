@@ -23,3 +23,16 @@ get_project_root() {
     fi
     echo ${PROJECT_DIR}
 }
+
+get_env() {
+    env_path="--"
+    local project_root=$1
+    if [[ -f "${project_root}/.env" ]]; then
+        env_path="${project_root}/.env"
+        echo "${env_path}"
+        exit 0
+    else
+        echo ".env file could not be found. exiting"
+        exit 1
+    fi
+}
