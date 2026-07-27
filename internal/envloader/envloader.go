@@ -10,10 +10,14 @@ import (
 
 type EnvSettings struct {
 	dbString string
+	env      string
 }
 
 func (e *EnvSettings) GetDBString() string {
 	return e.dbString
+}
+func (e *EnvSettings) GetEnv() string {
+	return e.env
 }
 func (e *EnvSettings) SetDBString(env string) error {
 	if env == "DEV" {
@@ -30,6 +34,13 @@ func (e *EnvSettings) SetDBString(env string) error {
 	}
 	return errors.New("unrecognized environment in SetDBString")
 }
+func (e *EnvSettings) SetEnv(env string) error {
+	if env != "DEV" && env != "PROD" {
+		return fmt.Errorf("%q is not a recognized environment\n", env)
+	}
+	e.env = env
+	return nil
+}
 
 func LoadEnvironment(envPath string) (envSettings *EnvSettings, err error) {
 	envSettings = &EnvSettings{}
@@ -45,6 +56,10 @@ func LoadEnvironment(envPath string) (envSettings *EnvSettings, err error) {
 		}
 	}
 	err = envSettings.SetDBString(env)
+	if err != nil {
+		return nil, err
+	}
+	err = envSettings.SetEnv(env)
 	if err != nil {
 		return nil, err
 	}
