@@ -8,19 +8,20 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"syscall"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/sohWenMing/aws_server/internal/awsserver"
 	dbpostgres "github.com/sohWenMing/aws_server/internal/db_postgres"
 	"github.com/sohWenMing/aws_server/internal/envloader"
+	"github.com/sohWenMing/aws_server/internal/utils"
 )
 
 const addr = ":8080"
 
 func main() {
-	project_root, err := get_project_root()
+	project_root, err := utils.GetProjectRoot()
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -36,15 +37,7 @@ func main() {
 			log.Fatal(err)
 		}
 	}
-	conn, err := pool.Acquire(context.TODO())
-	if err != nil {
-		log.Fatal(err)
-	}
-	connErr := conn.Ping(context.TODO())
-	if connErr != nil {
-		log.Fatal(err)
-	}
-	if err != nil {
+	if err := checkDBConnection(pool); err != nil {
 		log.Fatal(err)
 	}
 	// fmt.Println("pool: ", pool)
@@ -68,25 +61,33 @@ func main() {
 	}
 }
 
-func get_project_root() (project_root string, err error) {
-	cwd, err := os.Getwd()
+// sets a 10 second timeout for the whole operation to be able to finish, where we can get the correct ping
+func checkDBConnection(pool *pgxpool.Pool) error {
+	ctx, cancelFunc := context.WithTimeout(context.Background(), 10*time.Second)
+	doneChan := ctx.Done()
+	defer cancelFunc()
+	conn, err := pool.Acquire(ctx)
+	defer conn.Release()
 	if err != nil {
-		return "", err
+		return err
+	}
+
+	connErr := conn.Ping(ctx)
+	if connErr != nil {
+		return err
 	}
 	for {
-		_, err = os.Stat(fmt.Sprintf("%s/go.mod", cwd))
-		// if we can find the go.mod file, this is the project root, exit
-		if err == nil {
-			return cwd, nil
-		}
-		if cwd == "/" {
-			log.Fatal("project root could not be found")
-		}
-		if errors.Is(err, os.ErrNotExist) {
-			cwd = filepath.Dir(cwd)
-			continue
-		} else {
-			log.Fatal(fmt.Sprintf("project root could not be found. expected error: %v", err))
+		select {
+		case <-doneChan:
+			return ctx.Err()
+		default:
+			if err != nil {
+				fmt.Println("ping test to db connection not ok ... retrying ...")
+				continue
+			} else {
+				fmt.Println("ping test to db connection is OK")
+				return nil
+			}
 		}
 	}
 }
