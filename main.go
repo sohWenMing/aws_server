@@ -67,10 +67,10 @@ func checkDBConnection(pool *pgxpool.Pool) error {
 	doneChan := ctx.Done()
 	defer cancelFunc()
 	conn, err := pool.Acquire(ctx)
-	defer conn.Release()
 	if err != nil {
 		return err
 	}
+	defer conn.Release()
 
 	connErr := conn.Ping(ctx)
 	if connErr != nil {
