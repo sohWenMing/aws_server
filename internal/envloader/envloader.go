@@ -8,6 +8,7 @@ import (
 	"slices"
 
 	"github.com/joho/godotenv"
+	"github.com/sohWenMing/aws_server/internal/awsconnection"
 	"github.com/sohWenMing/aws_server/internal/utils"
 )
 
@@ -19,7 +20,7 @@ var environments = []Environment{
 	"PROD",
 }
 
-type prodDbCredentials struct {
+type devToProdDBCredentials struct {
 	user       string
 	password   string
 	dbName     string
@@ -27,14 +28,27 @@ type prodDbCredentials struct {
 	projectDir string
 }
 
-func (p prodDbCredentials) buildDBstring() string {
+func (p devToProdDBCredentials) buildDBstring() string {
 	return fmt.Sprintf("postgresql://%s:%s@localhost:5432/%s?sslmode=%s&sslrootcert=%s/global-bundle.pem",
 		p.user, p.password, p.dbName, p.sslMode, p.projectDir,
 	)
 }
 
-func getProdDbCredentials() prodDbCredentials {
-	returned := prodDbCredentials{}
+func getProdDBCredentials() (secrets awsconnection.DBSecret, err error) {
+	nilSecret := awsconnection.DBSecret{}
+	cfg, err := awsconnection.InitAWSConfig()
+	if err != nil {
+		return nilSecret, err
+	}
+	secrets, err = awsconnection.GetSecretFromSecretsManager(cfg)
+	if err != nil {
+		return nilSecret, err
+	}
+	return secrets, nil
+}
+
+func getDevToProdDBCredentials() devToProdDBCredentials {
+	returned := devToProdDBCredentials{}
 	returned.user = os.Getenv("PROD_POSTGRES_USER")
 	returned.password = os.Getenv("PROD_POSTGRES_PASSWORD")
 	returned.dbName = os.Getenv("PROD_DBNAME")
@@ -76,11 +90,19 @@ func (e *EnvSettings) SetDBString(env string) error {
 		return nil
 	}
 	if env == "DEV_TO_PROD" {
-		e.dbString = getProdDbCredentials().buildDBstring()
+		e.dbString = getDevToProdDBCredentials().buildDBstring()
 		return nil
 	}
 	if env == "PROD" {
-		e.dbString = "TODO"
+		prodCredentials, err := getProdDBCredentials()
+		if err != nil {
+			return err
+		}
+		dbString, err := prodCredentials.BuildDBString()
+		if err != nil {
+			return err
+		}
+		e.dbString = dbString
 		return nil
 	}
 	return errors.New("unrecognized environment in SetDBString")
